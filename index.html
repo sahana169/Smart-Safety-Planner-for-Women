@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Safe Daily Planner</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="container">
+
+  <!-- HEADER -->
+  <div class="header">
+    <span class="logo">🛡️</span>
+    <h1>Safe Daily Planner</h1>
+    <p>Plan your day smartly and safely</p>
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('planner')">📋 Planner</button>
+    <button class="tab" onclick="showTab('contacts')">📞 Contacts</button>
+    <button class="tab" onclick="showTab('checkin')">⏰ Check-in</button>
+  </div>
+
+  <!-- ===== TAB: PLANNER ===== -->
+  <div id="tab-planner" class="tab-content">
+    <div class="card">
+      <label for="name">Your Name (optional)</label>
+      <input type="text" id="name" placeholder="e.g. Priya" />
+      <label for="plan">Enter Your Daily Plan</label>
+      <textarea id="plan" rows="6" placeholder="e.g.
+College: 9 AM - 4 PM
+Tuition: 5 PM - 7 PM
+Outing with friends: 8 PM - 10 PM
+Travel back home: 10:30 PM"></textarea>
+      <button id="submitBtn" onclick="submitPlan()">Generate Safe Plan ✨</button>
+    </div>
+
+    <!-- RESULT -->
+    <div id="result" style="display:none">
+
+      <!-- Safety Score -->
+      <div class="card score-card">
+        <h2>🎯 Safety Score</h2>
+        <div class="score-wrap">
+          <div class="score-circle" id="scoreCircle">
+            <span id="scoreNum">--</span>
+            <small id="scoreLabel">--</small>
+          </div>
+          <div class="score-bar-wrap">
+            <div class="score-bar-bg">
+              <div class="score-bar-fill" id="scoreBarFill"></div>
+            </div>
+            <p id="scoreDesc"></p>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>📋 Safe Daily Plan</h2>
+        <pre id="safePlan"></pre>
+      </div>
+
+      <div class="section" id="suggestionBox">
+        <h2>⚠️ Safety Suggestion</h2>
+        <p id="suggestion"></p>
+      </div>
+
+      <div class="section tips">
+        <h2>💡 Safety Tips</h2>
+        <ol id="tips"></ol>
+      </div>
+
+      <!-- SOS Share -->
+      <div class="card sos-card">
+        <h2>🆘 SOS — Send SMS Alert</h2>
+        <p>Send your plan as an SMS to your saved emergency contacts.</p>
+        <div id="sosContactBtns" style="margin-top:12px"></div>
+        <p id="sosNoContacts" style="font-size:0.85rem;color:#aaa;display:none">No emergency contacts saved. Add them in the Contacts tab first.</p>
+      </div>
+    </div>
+
+    <div class="history-toggle">
+      <button class="outline" onclick="loadHistory()">View Past Plans 📂</button>
+    </div>
+    <div id="history"></div>
+  </div>
+
+  <!-- ===== TAB: CONTACTS ===== -->
+  <div id="tab-contacts" class="tab-content" style="display:none">
+    <div class="card">
+      <h2 style="color:#6a0dad;margin-bottom:16px">📞 Emergency Contacts</h2>
+      <p style="font-size:0.88rem;color:#888;margin-bottom:14px">Save up to 5 trusted contacts. Use the call button in an emergency.</p>
+
+      <label>Name</label>
+      <input type="text" id="cName" placeholder="e.g. Mom" />
+      <label>Phone Number</label>
+      <input type="tel" id="cPhone" placeholder="e.g. 9876543210" />
+      <label>Relation</label>
+      <input type="text" id="cRelation" placeholder="e.g. Mother, Friend, Brother" />
+      <button onclick="addContact()">Add Contact ➕</button>
+    </div>
+
+    <div id="contactsList"></div>
+  </div>
+
+  <!-- ===== TAB: CHECK-IN ===== -->
+  <div id="tab-checkin" class="tab-content" style="display:none">
+    <div class="card">
+      <h2 style="color:#6a0dad;margin-bottom:16px">⏰ Check-in Timer</h2>
+      <p style="font-size:0.88rem;color:#888;margin-bottom:14px">Set a time you should be home by. The app will alert you if time passes.</p>
+
+      <label>Your Name</label>
+      <input type="text" id="ciName" placeholder="e.g. Priya" />
+      <label>I should be home by</label>
+      <input type="time" id="ciTime" />
+      <label>Today's Plan (optional)</label>
+      <textarea id="ciPlan" rows="3" placeholder="e.g. Going to tuition, back by 7 PM"></textarea>
+      <button onclick="setCheckin()">Set Check-in Timer ⏱️</button>
+    </div>
+
+    <div id="checkinStatus"></div>
+  </div>
+
+</div>
+
+<script>
+const API = "http://localhost:3000";
+
+// ---- TABS ----
+function showTab(tab) {
+  document.querySelectorAll(".tab-content").forEach(el => el.style.display = "none");
+  document.querySelectorAll(".tab").forEach(el => el.classList.remove("active"));
+  document.getElementById("tab-" + tab).style.display = "block";
+  event.target.classList.add("active");
+  if (tab === "contacts") loadContacts();
+  if (tab === "checkin") loadCheckinStatus();
+}
+
+// ---- PLANNER ----
+async function submitPlan() {
+  const name = document.getElementById("name").value.trim();
+  const plan = document.getElementById("plan").value.trim();
+  if (!plan) { alert("Please enter your daily plan first."); return; }
+
+  const btn = document.getElementById("submitBtn");
+  btn.textContent = "Analyzing...";
+  btn.disabled = true;
+  document.getElementById("result").style.display = "none";
+
+  try {
+    const res = await fetch(`${API}/api/plan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, plan })
+    });
+    if (!res.ok) { alert((await res.json()).error || "Server error."); return; }
+    const data = await res.json();
+
+    // Safety Score
+    const circle = document.getElementById("scoreCircle");
+    document.getElementById("scoreNum").textContent = data.score;
+    document.getElementById("scoreLabel").textContent = data.scoreLabel;
+    circle.className = "score-circle score-" + data.scoreColor;
+    document.getElementById("scoreBarFill").style.width = data.score + "%";
+    document.getElementById("scoreBarFill").className = "score-bar-fill bar-" + data.scoreColor;
+    document.getElementById("scoreDesc").textContent =
+      data.score >= 80 ? "Your plan looks safe. Well done!" :
+      data.score >= 50 ? "Some risky timings detected. Review suggestions below." :
+      "Multiple unsafe timings. Please revise your plan.";
+
+    document.getElementById("safePlan").textContent = data.safePlan;
+    document.getElementById("suggestion").textContent = data.suggestion;
+
+    const tipsEl = document.getElementById("tips");
+    tipsEl.innerHTML = "";
+    data.tips.forEach(tip => {
+      const li = document.createElement("li");
+      li.textContent = tip;
+      tipsEl.appendChild(li);
+    });
+
+    const sb = document.getElementById("suggestionBox");
+    sb.className = "section " + (data.suggestion.includes("after 8 PM") ? "warning" : "safe");
+
+    document.getElementById("result").style.display = "block";
+    setTimeout(() => document.getElementById("result").scrollIntoView({ behavior: "smooth" }), 100);
+    loadSOSContacts();
+  } catch (e) {
+    console.error(e);
+    alert("Could not connect to server. Make sure 'node backend/server.js' is running.");
+  } finally {
+    btn.textContent = "Generate Safe Plan ✨";
+    btn.disabled = false;
+  }
+}
+
+async function loadHistory() {
+  try {
+    const res = await fetch(`${API}/api/plans`);
+    const plans = await res.json();
+    const el = document.getElementById("history");
+    if (!plans.length) { el.innerHTML = "<p style='text-align:center;color:#888;padding:16px'>No past plans yet.</p>"; return; }
+    el.innerHTML = plans.map(p => `
+      <div class="card history-card">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <strong>${p.name}</strong>
+          <span class="score-badge score-badge-${scoreColor(p.score)}">${p.score ?? "--"}/100</span>
+        </div>
+        <span class="date">${new Date(p.created_at).toLocaleString()}</span>
+        <pre>${p.safe_plan}</pre>
+      </div>`).join("");
+  } catch (e) { alert("Could not load history."); }
+}
+
+function scoreColor(s) {
+  if (!s) return "green";
+  return s >= 80 ? "green" : s >= 50 ? "orange" : "red";
+}
+
+// ---- SOS ----
+async function loadSOSContacts() {
+  try {
+    const res = await fetch(`${API}/api/contacts`);
+    const contacts = await res.json();
+    const wrap = document.getElementById("sosContactBtns");
+    const noC = document.getElementById("sosNoContacts");
+    if (!contacts.length) { wrap.innerHTML = ""; noC.style.display = "block"; return; }
+    noC.style.display = "none";
+    const plan = document.getElementById("safePlan").textContent || "No plan entered.";
+    const name = document.getElementById("name").value.trim() || "A friend";
+    const msg = encodeURIComponent(`🆘 Safety Alert from ${name}\n\nMy plan for today:\n${plan}\n\nPlease check on me if you don't hear from me. Stay safe! 🛡️`);
+    wrap.innerHTML = contacts.map(c =>
+      `<a href="sms:${c.phone}?body=${msg}" class="sms-btn">📩 SMS to ${c.name} (${c.relation || c.phone})</a>`
+    ).join("");
+  } catch(e) { console.error(e); }
+}
+
+// ---- CONTACTS ----
+async function loadContacts() {
+  const res = await fetch(`${API}/api/contacts`);
+  const contacts = await res.json();
+  const el = document.getElementById("contactsList");
+  if (!contacts.length) {
+    el.innerHTML = "<p style='text-align:center;color:#888;padding:16px'>No contacts saved yet.</p>";
+    return;
+  }
+  el.innerHTML = contacts.map(c => `
+    <div class="card contact-card">
+      <div class="contact-info">
+        <div class="contact-avatar">${c.name[0].toUpperCase()}</div>
+        <div>
+          <strong>${c.name}</strong>
+          <span class="relation-tag">${c.relation}</span><br/>
+          <span style="font-size:0.9rem;color:#555">${c.phone}</span>
+        </div>
+      </div>
+      <div class="contact-actions">
+        <a href="tel:${c.phone}" class="call-btn">📞 Call</a>
+        <button class="del-btn" onclick="deleteContact(${c.id})">🗑️</button>
+      </div>
+    </div>`).join("");
+}
+
+async function addContact() {
+  const name = document.getElementById("cName").value.trim();
+  const phone = document.getElementById("cPhone").value.trim();
+  const relation = document.getElementById("cRelation").value.trim();
+  if (!name || !phone) { alert("Name and phone are required."); return; }
+  const res = await fetch(`${API}/api/contacts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, phone, relation })
+  });
+  if (!res.ok) { alert((await res.json()).error); return; }
+  document.getElementById("cName").value = "";
+  document.getElementById("cPhone").value = "";
+  document.getElementById("cRelation").value = "";
+  loadContacts();
+}
+
+async function deleteContact(id) {
+  await fetch(`${API}/api/contacts/${id}`, { method: "DELETE" });
+  loadContacts();
+}
+
+// ---- CHECK-IN TIMER ----
+let checkinInterval = null;
+
+async function setCheckin() {
+  const name = document.getElementById("ciName").value.trim();
+  const time = document.getElementById("ciTime").value;
+  const plan = document.getElementById("ciPlan").value.trim();
+  if (!time) { alert("Please set a return time."); return; }
+
+  await fetch(`${API}/api/checkin`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, returnTime: time, plan })
+  });
+  loadCheckinStatus();
+}
+
+async function clearCheckin(safe) {
+  await fetch(`${API}/api/checkin`, { method: "DELETE" });
+  if (checkinInterval) { clearInterval(checkinInterval); checkinInterval = null; }
+  if (safe) {
+    document.getElementById("checkinStatus").innerHTML = `
+      <div class="card checkin-safe">
+        <h2>✅ You're Home Safe!</h2>
+        <p>Great! Your check-in has been cleared. Stay safe always. 💜</p>
+      </div>`;
+  } else {
+    document.getElementById("checkinStatus").innerHTML =
+      "<p style='text-align:center;color:#888;padding:16px'>No active check-in.</p>";
+  }
+}
+
+async function loadCheckinStatus() {
+  const res = await fetch(`${API}/api/checkin`);
+  const checkin = await res.json();
+  const el = document.getElementById("checkinStatus");
+  if (!checkin) {
+    el.innerHTML = "<p style='text-align:center;color:#888;padding:16px'>No active check-in timer.</p>";
+    return;
+  }
+  if (checkinInterval) clearInterval(checkinInterval);
+  checkinInterval = setInterval(() => renderCheckin(checkin), 1000);
+  renderCheckin(checkin);
+}
+
+async function renderCheckin(checkin) {
+  const now = new Date();
+  const [h, m] = checkin.returnTime.split(":").map(Number);
+  const target = new Date();
+  target.setHours(h, m, 0, 0);
+  const diff = target - now;
+  const el = document.getElementById("checkinStatus");
+  if (!el) return;
+
+  if (diff <= 0) {
+    // Time passed — fetch contacts and show SMS buttons
+    clearInterval(checkinInterval);
+    checkinInterval = null;
+    let smsBtns = "";
+    try {
+      const res = await fetch(`${API}/api/contacts`);
+      const contacts = await res.json();
+      const msg = encodeURIComponent(
+        `🚨 Safety Alert!\n${checkin.name || "My friend"} was supposed to be home by ${checkin.returnTime} but hasn't checked in.\nPlan: ${checkin.plan || "Not specified"}\nPlease check on them immediately!`
+      );
+      if (contacts.length) {
+        smsBtns = contacts.map(c =>
+          `<a href="sms:${c.phone}?body=${msg}" class="sms-btn sms-alert">📩 SMS ${c.name} (${c.relation || c.phone})</a>`
+        ).join("");
+      } else {
+        smsBtns = `<p style="font-size:0.85rem;color:#aaa;margin-top:8px">No emergency contacts saved. Add them in the Contacts tab.</p>`;
+      }
+    } catch(e) {}
+
+    el.innerHTML = `
+      <div class="card checkin-alert">
+        <h2>🚨 Check-in Overdue!</h2>
+        <p><strong>${checkin.name || "You"}</strong> should have been home by <strong>${checkin.returnTime}</strong>.</p>
+        <p style="margin-top:6px;font-size:0.88rem;color:#666">${checkin.plan || ""}</p>
+        <p style="margin-top:12px;font-weight:600;color:#c0392b">Send an SMS alert to your emergency contacts:</p>
+        <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px">${smsBtns}</div>
+        <button class="outline" style="margin-top:14px" onclick="clearCheckin(false)">Dismiss</button>
+      </div>`;
+    return;
+  }
+
+  const hrs = Math.floor(diff / 3600000);
+  const mins = Math.floor((diff % 3600000) / 60000);
+  const secs = Math.floor((diff % 60000) / 1000);
+
+  el.innerHTML = `
+    <div class="card checkin-active">
+      <h2>⏰ Check-in Active</h2>
+      <p>Expected home by <strong>${checkin.returnTime}</strong></p>
+      <div class="countdown">${String(hrs).padStart(2,"0")}:${String(mins).padStart(2,"0")}:${String(secs).padStart(2,"0")}</div>
+      <p style="font-size:0.85rem;color:#888;margin-top:8px">${checkin.plan || ""}</p>
+      <button style="margin-top:14px;background:linear-gradient(135deg,#27ae60,#1e8449)" onclick="clearCheckin(true)">✅ I'm Home Safe</button>
+    </div>`;
+}
+</script>
+</body>
+</html>
