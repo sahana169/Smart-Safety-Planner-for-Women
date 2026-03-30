@@ -24,3 +24,4 @@ Tech Stack
 Frontend: HTML, CSS, JavaScript
 Backend: Node.js, Express.js
 Database: JSON (LowDB)
+![Smart Safety Planner Screenshot](homepage.png)
